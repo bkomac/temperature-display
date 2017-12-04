@@ -1,4 +1,4 @@
-# temperature-display
+# Temperature display
 Temperature display gets data via RF from a temperature sensor (ESP8266 based) in a hot water tank. Data transfer is wired with Node-red.
 
 ![Node-RED flow](doc/nr_flow.PNG  "Temperature display")
