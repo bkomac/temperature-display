@@ -5,7 +5,7 @@
 #include <SPI.h>
 #include <SoftwareSerial.h>
 
-String appVer = "1.0.3";
+String appVer = "1.0.4";
 String appId = "ARDAD23FD";
 
 // TFT
@@ -29,12 +29,12 @@ SoftwareSerial HC12(RxPin, TxPin);
 #define DHTPIN 7
 DHT22 dht(DHTPIN);
 
-String temp = "00";
-long heartBeat = 10; // in seconds
+String temp = "--";
+int heartBeat = 10; // in seconds
 long lastSend = millis();
 long lastRecieve = millis();
 
-long measureInterval = 300; // in seconds
+int measureInterval = 180; // in seconds
 long lastMeasureTime = millis();
 int lastMeasure = 0;
 
@@ -79,9 +79,28 @@ void loop() {
     DynamicJsonBuffer jsonBuffer;
     JsonObject &root = jsonBuffer.parseObject(readString);
 
-    if (root["temp"] != "") {
+    if (root["temp"] != "" && root["forId"] == appId) {
       temp = root["temp"].asString();
+
+       Serial.print(">> Data OK : measureInterval=" + String(measureInterval) +" heartBeat=" + String(heartBeat)+" millis()="+millis()+ "\n");
+       lastRecieve = millis();
     }
+
+    if (root["forId"] == appId && root["heartBeat"] != 0) {
+        if(root["measureInterval"] != "")
+          measureInterval = root["measureInterval"];
+        if(root["heartBeat"] != "")
+            heartBeat = root["heartBeat"];
+        Serial.print(">> Setings income -> measureInterval=" + String(measureInterval) +" heartBeat=" + String(heartBeat)+"\n");
+    }
+
+    if (root["reset"] == true && root["forId"] == appId) {
+      Serial.print("\n >> Resetting ... ");
+      delay(500);
+      softReset();
+      delay(500);
+    }
+
     blink();
   }
 
@@ -92,8 +111,8 @@ void loop() {
   float t;
   errorCode = DHT_ERROR_NONE;
   if (errorCode == DHT_ERROR_NONE) {
-    t = dht.getTemperatureC();
-    h = dht.getHumidity();
+    t = dht.getTemperatureC() - 3.1; // for in housing correction
+    h = dht.getHumidity() - 4;
 
     sendData(t, h);
 
@@ -104,12 +123,24 @@ void loop() {
     tft.setCursor(35, 17);
     tft.println("temperature");
 
-    if (temp.length() > 0) {
+    long mark = (lastRecieve + (measureInterval * 1000L));
+    if (millis() > mark) {
+      Serial.println("Obsolate data... lastRecieve="+String(mark)+" measureInterval="+measureInterval + " millis()="+millis());
       temp.trim();
       tft.setTextSize(7);
-
       tft.setCursor(29, 37);
+      tft.setTextColor(ST7735_GRAY, ST7735_BLACK);
+      tft.print(temp);
 
+      tft.setTextSize(1);
+      String deg = (String)((char)247) + "C";
+      tft.print(deg);
+      measureTrend(temp);
+
+    } else if (temp.length() > 0) {
+      temp.trim();
+      tft.setTextSize(7);
+      tft.setCursor(29, 37);
       tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
       tft.print(temp);
 
@@ -119,6 +150,7 @@ void loop() {
 
       measureTrend(temp);
     }
+
     tft.setCursor(10, 95);
     tft.setTextSize(1);
     tft.setTextColor(ST7735_YELLOW, ST7735_BLACK);
@@ -150,7 +182,6 @@ void loop() {
     tft.setTextSize(1);
     hum = "%";
     tft.print(hum);
-
   } else {
     Serial.print("error: ");
     Serial.println(errorCode);
@@ -173,7 +204,6 @@ void measureTrend(String tt) {
     Serial.print("\nLast measure: " + (String)lastMeasure);
   }
 
-  Serial.print("\nTrend ... ");
   if ((lastMeasure - tt.toInt()) > 0) {
     printCh(25);
   } else if ((lastMeasure - tt.toInt()) < 0) {
@@ -197,7 +227,7 @@ void blink() {
 
 void printCh(int ch) {
   tft.setTextSize(3);
-  tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
+  // tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
   tft.setCursor(6, 53);
   tft.print((char)ch);
 }
@@ -240,3 +270,5 @@ void testfillcircles(uint8_t radius, uint16_t color) {
     }
   }
 }
+
+void softReset() { asm volatile("  jmp 0"); }
